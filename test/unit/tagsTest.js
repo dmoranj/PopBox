@@ -99,7 +99,60 @@ describe.only('Tags', function() {
     });
 
     describe("When a message is posted to a tag", function () {
-        it ("should publish to all the inboxes associated to the tag");
+        var publish;
+
+        beforeEach(function(done) {
+            var createTag = {
+                url: "http://" + HOST + ":" + PORT + "/tag",
+                method: "POST",
+                json: {}
+            };
+
+            publish = {
+                url: "http://" + HOST + ":" + PORT + "/trans",
+                method: "POST",
+                json: {
+                    "payload": "Published message",
+                    "priority":"H",
+                    "callback":"http://foo.bar",
+                    "queue":[
+                    ],
+                    "tags": [
+                        "tag2"
+                    ]
+                }
+            };
+
+            createTag.json.name = "tag1";
+            createTag.json.queues = ["A1", "B1"]
+            request(createTag, function (error, response, body) {
+                createTag.json.name = "tag2";
+                createTag.json.queues = ["A2", "B2"]
+                request(createTag, function (error, response, body) {
+                    done();
+                });
+            });
+        });
+
+        it ("should publish to all the inboxes associated to the tag", function (done) {
+            request(publish, function(error, response, body) {
+                response.statusCode.should.equal(200);
+
+                var checkQueue = {
+                    url: "http://" + HOST + ":" + PORT + "/queue/B2/pop",
+                    method: "POST"
+                }
+
+                request(checkQueue, function (error, response, body) {
+                    response.statusCode.should.equal(200);
+
+                    var parsedBody = JSON.parse(body);
+                    should.exist(parsedBody.data);
+                    parsedBody.data.length.should.equal(1);
+                    done();
+                });
+            });
+        });
     });
 
     after(function(done) {
