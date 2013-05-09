@@ -10,7 +10,7 @@ var should = require('should'),
 var HOST = config.hostname;
 var PORT = config.port;
 
-describe.only('Tags', function() {
+describe('Tags', function() {
 
     beforeEach(function(done) {
         utils.cleanBBDD(done);
