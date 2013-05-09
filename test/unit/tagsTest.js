@@ -95,7 +95,40 @@ describe.only('Tags', function() {
     });
 
     describe("When a tag is removed", function () {
-        it("should erase it from Redis");
+        var removeTag;
+
+        beforeEach(function (done) {
+            var createTag = {
+                url: "http://" + HOST + ":" + PORT + "/tag",
+                method: "POST",
+                json: {}
+            };
+            removeTag = {
+                url: "http://" + HOST + ":" + PORT + "/tag/tag1",
+                method: "DELETE",
+                json: {}
+            };
+            createTag.json.name = "tag1";
+            createTag.json.queues = ["A1", "B1"]
+            request(createTag, function (error, response, body) {
+                done();
+            });
+        });
+
+        it("should erase it from Redis", function (done) {
+            request(removeTag, function (error, response, body) {
+                var getTag = {
+                    url: "http://" + HOST + ":" + PORT + "/tag/tag1",
+                    method: "GET",
+                    json: {}
+                };
+
+                request(getTag, function(error, response, tag) {
+                    tag.queues.length.should.equal(0);
+                    done();
+                });
+            });
+        });
     });
 
     describe("When a message is posted to a tag", function () {
