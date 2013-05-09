@@ -188,6 +188,49 @@ describe.only('Tags', function() {
         });
     });
 
+    describe("When a queue is appended to a tag", function() {
+        var updateTag;
+
+        beforeEach(function (done) {
+            var createTag = {
+                url: "http://" + HOST + ":" + PORT + "/tag",
+                method: "POST",
+                json: {
+                    name: "tag1",
+                    queues: ["A1", "B1"]
+                }
+            };
+
+            updateTag = {
+                url: "http://" + HOST + ":" + PORT + "/tag",
+                method: "POST",
+                json: {
+                    name: "tag1",
+                    queues: ["C1", "D1", "E1"]
+                }
+            };
+
+            request(createTag, function (error, response, body) {
+                done();
+            });
+        });
+
+        it("should update the tag", function(done) {
+            request(updateTag, function (error, response, body) {
+                var getTag = {
+                    url: "http://" + HOST + ":" + PORT + "/tag/tag1",
+                    method: "GET",
+                    json: {}
+                };
+
+                request(getTag, function(error, response, tag) {
+                    tag.queues.length.should.equal(5);
+                    done();
+                });
+            });
+        });
+    });
+
     after(function(done) {
         utils.cleanBBDD(function() {
             agent.stop(done);
