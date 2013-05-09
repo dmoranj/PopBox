@@ -38,10 +38,31 @@ describe.only('Tags', function() {
             };
         });
 
-        it("should store it in Redis", function (done) {
+        it("should accept correct tags", function (done) {
             request(req, function(error, response, body) {
+                should.not.exist(error);
                 response.statusCode.should.equal(200);
                 done();
+            });
+        });
+
+        it("should store tags in the db", function(done) {
+            request(req, function(err, res, body) {
+                var getTag = {
+                    url: "http://" + HOST + ":" + PORT + "/tag/newTag",
+                    method: "GET"
+                };
+
+                request(getTag, function (error, response, tagBody) {
+                    should.not.exist(error);
+                    response.statusCode.should.equal(200);
+
+                    var parsedBody = JSON.parse(tagBody);
+                    parsedBody.name.should.equal("newTag");
+                    parsedBody.queues.length.should.equal(2);
+
+                    done();
+                });
             });
         });
 
