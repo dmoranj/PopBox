@@ -8,6 +8,11 @@ package { 'nodejs':
 ensure => installed,
 }
 
+package { 'nodejs-legacy':
+ensure => installed,
+require => Package['nodejs'],
+}
+
 package { 'npm':
 ensure => installed,
 require => Package['nodejs'],
@@ -39,7 +44,7 @@ logoutput => true,
 exec {'n':
 command => 'npm install -g n',
 unless => 'which n',
-require => Package['npm'],
+require => Package['nodejs-legacy', 'npm'],
 }
 
 exec {'n 0.8.14':
@@ -55,6 +60,7 @@ require => Exec['n 0.8.14'],
 #################################################
 exec {'popbox':
 command => 'git clone https://github.com/dmoranj/PopBox.git',
+cwd => '/home/ubuntu',
 unless => 'ls /home/ubuntu/PopBox',
 }
 
