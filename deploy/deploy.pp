@@ -1,3 +1,8 @@
+# Configuration
+################################
+$installdir = "/home/ubuntu"
+$popboxdir = "${installdir}/PopBox"
+
 # Prerequisite packages
 #################################
 package { 'git':
@@ -60,16 +65,25 @@ require => Exec['n 0.8.14'],
 #################################################
 exec {'popbox':
 command => 'git clone https://github.com/dmoranj/PopBox.git',
-cwd => '/home/ubuntu',
-unless => 'ls /home/ubuntu/PopBox',
+cwd => $installdir,
+unless => "ls ${popboxdir}",
 }
 
 exec {'dependencies':
 command => 'npm install',
-cwd     => '/home/ubuntu/PopBox' ,
+cwd     => $popboxdir,
 require => Exec['popbox'],
 }
 
 notify {'Popbox cloned and installed':
 require => Exec['dependencies'],
 }
+
+# Execute Popbox
+######################################################
+exec {'popbox':
+command => 'nohup bin/popbox &> pop.log&',
+cwd => $popboxdir,
+require => Exec['dependencies'],
+}
+
