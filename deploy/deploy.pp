@@ -63,7 +63,7 @@ require => Exec['n 0.8.14'],
 
 # Install Popbox
 #################################################
-exec {'popbox':
+exec {'popboxclone':
 command => 'git clone https://github.com/dmoranj/PopBox.git',
 cwd => $installdir,
 unless => "ls ${popboxdir}",
@@ -72,7 +72,7 @@ unless => "ls ${popboxdir}",
 exec {'dependencies':
 command => 'npm install',
 cwd     => $popboxdir,
-require => Exec['popbox'],
+require => Exec['popboxclone'],
 }
 
 notify {'Popbox cloned and installed':
