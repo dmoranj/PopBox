@@ -7,3 +7,6 @@ apt-get install puppet -y
 echo "redis-$(hostname)" > /etc/hostname
 hostname $(cat /etc/hostname)
 
+echo "@PM_IP puppet" >> /etc/hosts
+
+

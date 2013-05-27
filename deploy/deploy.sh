@@ -2,6 +2,14 @@
 
 . config.sh
 
+# DEFINITIONS
+####################################################################
+TMP_FOLDER=/tmp
+
+
+# FUNCTIONS
+####################################################################
+
 # Log an error to the console
 function error() {
   echo -e "\n\t-> Error: $1\n";
@@ -76,29 +84,33 @@ function wait_for() {
 # Deploy a PopBox agent instance in EC2 that will be connected to an external redis.
 function deploy_agent() {
   task "Deploying Popbox Agent number $1"
-  INITFILE=./initScripts/initAgent.sh
+  INITFILE=$TMP_FOLDER/initAgent.sh
   OUTPUT=$(ec2-run-instances $IMAGE -t $SIZE --region $REGION --key $KEYS -g $GROUP --user-data-file $INITFILE)
   INSTANCE_ID=$(echo $OUTPUT|awk '{print $6}')
 
   wait_for $INSTANCE_ID
 }
 
+# Extract the IPs of the redis using its instance ID and add it to the global array
 function extract_redis_data() {
   INSTANCE_ID=$1
   OUTPUT=$(ec2-describe-instances --region $REGION $INSTANCE_ID)
-  PM_OUT_IP=$(echo $OUTPUT | awk ' /^INSTANCE/ {print $15}')
-  PM_IN_IP=$(echo $OUTPUT | awk ' /^INSTANCE/ {print $14}')
-  log "REDIS: InternalIP($PM_IN_IP), ExternalIP($PM_OUT_IP)"
+  REDIS_IN_IP=$(echo $OUTPUT | awk '{print $19}')
+  REDIS_OUT_IP=$(echo $OUTPUT | awk '{print $18}')
+  REDIS_OUT_IPS+=( $REDIS_OUT_IP )
+  REDIS_IN_IPS+=( $REDIS_IN_IP )
+  log "REDIS: InternalIP($REDIS_IN_IP), ExternalIP($REDIS_OUT_IP)"
 }
 
 # Deploy a Redis instance in EC2
 function deploy_redis() {
   task "Deploying Redis instance number $1"
-  INITFILE=./initScripts/initRedis.sh
+  INITFILE=$TMP_FOLDER/initRedis.sh
   OUTPUT=$(ec2-run-instances $IMAGE -t $SIZE --region $REGION --key $KEYS -g $GROUP --user-data-file $INITFILE)
   INSTANCE_ID=$(echo $OUTPUT|awk '{print $6}')
 
   wait_for $INSTANCE_ID
+  extract_redis_data $INSTANCE_ID
 }
 
 # Deploy a minimal installation of PopBox composed of a single EC2 instance with 
@@ -112,12 +124,18 @@ function deploy_minimal() {
   wait_for $INSTANCE_ID
 }
 
+# Extract the Puppet Master data from its instance ID in EC2
 function extract_puppet_master_data() {
   INSTANCE_ID=$1
   OUTPUT=$(ec2-describe-instances --region $REGION $INSTANCE_ID)
-  PM_OUT_IP=$(echo $OUTPUT | awk ' /^INSTANCE/ {print $15}')
-  PM_IN_IP=$(echo $OUTPUT | awk ' /^INSTANCE/ {print $14}')
+  PM_OUT_IP=$(echo $OUTPUT | awk '{print $19}')
+  PM_IN_IP=$(echo $OUTPUT | awk '{print $18}')
   log "Puppet Master: InternalIP($PM_IN_IP), ExternalIP($PM_OUT_IP)"
+}
+
+function create_init_scripts() {
+  cat initScripts/initAgent.sh | sed s/@PM_IP/$PM_IN_IP/g > $TMP_FOLDER/initAgent.sh
+  cat initScripts/initRedis.sh | sed s/@PM_IP/$PM_IN_IP/g > $TMP_FOLDER/initRedis.sh
 }
 
 # Deploy the puppet master that will coordinate the configuration of the machines
@@ -128,6 +146,8 @@ function deploy_puppet_master() {
   INSTANCE_ID=$(echo $OUTPUT|awk '{print $6}')
 
   wait_for $INSTANCE_ID
+  extract_puppet_master_data $INSTANCE_ID
+  create_init_scripts
 }
 
 
