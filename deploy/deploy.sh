@@ -4,14 +4,26 @@
 
 # Log an error to the console
 function error() {
-  echo -e "\n\tError: $1\n";
+  echo -e "\n\t-> Error: $1\n";
 }
+
+# Log information to the console
+function log() {
+  echo -e "\t- $1";
+}
+
+# Log a task title to the console
+function task() {
+  echo -e "\n  *) $1";
+}
+
 
 # Show the script usage
 function show_usage() {
   echo -e "Usage:"
   echo -e "\tdeploy.sh install [agents] [redisNodes] [branch]\n"
   echo -e "\tdeploy.sh help\n"
+  exit 0
 }
 
 # Check if the EC2 environment is correctly set and working
@@ -39,6 +51,36 @@ function check_ec2_environment() {
   fi
 }
 
+# Deploy a PopBox agent instance in EC2 that will be connected to an external redis.
+function deploy_agent() {
+  log "Deploying Popbox Agent number $1"
+  INITFILE=./initScripts/initAgent.sh
+  ec2-run-instances $IMAGE -t $SIZE --region $REGION --key $KEYS -g $GROUP --user-data-file $INITFILE
+}
+
+# Deploy a Redis instance in EC2
+function deploy_redis() {
+  log "Deploying Redis instance number $1"
+  INITFILE=./initScripts/initRedis.sh
+  ec2-run-instances $IMAGE -t $SIZE --region $REGION --key $KEYS -g $GROUP --user-data-file $INITFILE
+}
+
+# Deploy a minimal installation of PopBox composed of a single EC2 instance with 
+# Redis and the PopBox agent
+function deploy_minimal() {
+  log "Deploying minimal instance"
+  INITFILE=./initScripts/initMinimal.sh
+  ec2-run-instances $IMAGE -t $SIZE --region $REGION --key $KEYS -g $GROUP --user-data-file $INITFILE
+}
+
+# Deploy the puppet master that will coordinate the configuration of the machines
+function deploy_puppet_master() {
+  log "Deploying puppet master"
+  INITFILE=./initScripts/initPuppetMaster.sh
+  ec2-run-instances $IMAGE -t $SIZE --region $REGION --key $KEYS -g $GROUP --user-data-file $INITFILE
+}
+
+
 # Deploy an instance of the full stack. The number of Popbox Agents and 
 # Redis instances will be taken from the config files, unless overriden
 # by the input parameters.
@@ -56,10 +98,20 @@ function deploy_vm () {
   fi;
 
   if [[ $AGENT_NUMBER = 0 ]]; then
-  	echo "Deploying branch $GIT_BRANCH in the minimal configuration"
-	#ec2-run-instances $IMAGE -t $SIZE --region $REGION --key $KEYS -g $GROUP --user-data-file $INITFILE
+    task "Deploying branch $GIT_BRANCH in the minimal configuration"
+    deploy_minimal
   else
-        echo "Deploying branch $GIT_BRANCH with $AGENT_NUMBER Agents connected to $REDIS_NUMBER Redis"
+    task "Deploying branch $GIT_BRANCH with $AGENT_NUMBER Agents connected to $REDIS_NUMBER Redis"
+
+    deploy_puppet_master
+    for i in `seq 1 $AGENT_NUMBER`;
+    do
+      deploy_agent $i
+    done   
+    for i in `seq 1 $REDIS_NUMBER`;
+    do
+      deploy_redis $i
+    done 
   fi
 }
 
@@ -67,7 +119,6 @@ function deploy_vm () {
 function dispatch_actions() {
   case "$1" in 
     install)
-	echo "Deploying VMs"
 	deploy_vm $2 $3 $4
     ;;
     help)
@@ -81,4 +132,6 @@ function dispatch_actions() {
 
 check_ec2_environment
 dispatch_actions $1 $2 $3 $4
+
+task "All actions finished\n"
 

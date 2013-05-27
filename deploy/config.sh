@@ -5,7 +5,7 @@ SIZE=t1.micro
 REGION=eu-west-1
 KEYS=dani-keys
 GROUP=apigeetest
-INITFILE=initSample.sh
+INITFILE=initMinimal.sh
 IMAGE=ami-7e636a0a
 
 # Default Architecture
