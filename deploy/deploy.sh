@@ -14,7 +14,7 @@ function log() {
 
 # Log a task title to the console
 function task() {
-  echo -e "\n  *) $1";
+  echo -e "\n  *) $1\n";
 }
 
 
@@ -51,33 +51,83 @@ function check_ec2_environment() {
   fi
 }
 
+# Wait for a EC2 instance to be deployed
+function wait_for() {
+  IID=$1
+  log "Waiting for instance $IID" 
+
+  TIMES=0
+  while [ 5 -gt $TIMES ] && ! ec2-describe-instances --region $REGION $IID | grep -q "running"
+  do
+    TIMES=$(( $TIMES + 1 ))
+    log "Verifying state of instance $IID"
+    sleep 10
+  done 
+
+  STATUS=$(ec2-describe-instance-status --region $REGION $IID | awk '/^INSTANCE/ {print $4}' | head -n 1)
+
+  if [ "$STATUS" = "running" ]; then 
+    log "Instance successfully installed"
+  else
+    error "Instance ended in an unexpected state: $STATUS" 
+  fi  
+}
+
 # Deploy a PopBox agent instance in EC2 that will be connected to an external redis.
 function deploy_agent() {
-  log "Deploying Popbox Agent number $1"
+  task "Deploying Popbox Agent number $1"
   INITFILE=./initScripts/initAgent.sh
-  ec2-run-instances $IMAGE -t $SIZE --region $REGION --key $KEYS -g $GROUP --user-data-file $INITFILE
+  OUTPUT=$(ec2-run-instances $IMAGE -t $SIZE --region $REGION --key $KEYS -g $GROUP --user-data-file $INITFILE)
+  INSTANCE_ID=$(echo $OUTPUT|awk '{print $6}')
+
+  wait_for $INSTANCE_ID
+}
+
+function extract_redis_data() {
+  INSTANCE_ID=$1
+  OUTPUT=$(ec2-describe-instances --region $REGION $INSTANCE_ID)
+  PM_OUT_IP=$(echo $OUTPUT | awk ' /^INSTANCE/ {print $15}')
+  PM_IN_IP=$(echo $OUTPUT | awk ' /^INSTANCE/ {print $14}')
+  log "REDIS: InternalIP($PM_IN_IP), ExternalIP($PM_OUT_IP)"
 }
 
 # Deploy a Redis instance in EC2
 function deploy_redis() {
-  log "Deploying Redis instance number $1"
+  task "Deploying Redis instance number $1"
   INITFILE=./initScripts/initRedis.sh
-  ec2-run-instances $IMAGE -t $SIZE --region $REGION --key $KEYS -g $GROUP --user-data-file $INITFILE
+  OUTPUT=$(ec2-run-instances $IMAGE -t $SIZE --region $REGION --key $KEYS -g $GROUP --user-data-file $INITFILE)
+  INSTANCE_ID=$(echo $OUTPUT|awk '{print $6}')
+
+  wait_for $INSTANCE_ID
 }
 
 # Deploy a minimal installation of PopBox composed of a single EC2 instance with 
 # Redis and the PopBox agent
 function deploy_minimal() {
-  log "Deploying minimal instance"
+  task "Deploying minimal instance"
   INITFILE=./initScripts/initMinimal.sh
-  ec2-run-instances $IMAGE -t $SIZE --region $REGION --key $KEYS -g $GROUP --user-data-file $INITFILE
+  OUTPUT=$(ec2-run-instances $IMAGE -t $SIZE --region $REGION --key $KEYS -g $GROUP --user-data-file $INITFILE)
+  INSTANCE_ID=$(echo $OUTPUT|awk '{print $6}')
+
+  wait_for $INSTANCE_ID
+}
+
+function extract_puppet_master_data() {
+  INSTANCE_ID=$1
+  OUTPUT=$(ec2-describe-instances --region $REGION $INSTANCE_ID)
+  PM_OUT_IP=$(echo $OUTPUT | awk ' /^INSTANCE/ {print $15}')
+  PM_IN_IP=$(echo $OUTPUT | awk ' /^INSTANCE/ {print $14}')
+  log "Puppet Master: InternalIP($PM_IN_IP), ExternalIP($PM_OUT_IP)"
 }
 
 # Deploy the puppet master that will coordinate the configuration of the machines
 function deploy_puppet_master() {
-  log "Deploying puppet master"
+  task "Deploying puppet master"
   INITFILE=./initScripts/initPuppetMaster.sh
-  ec2-run-instances $IMAGE -t $SIZE --region $REGION --key $KEYS -g $GROUP --user-data-file $INITFILE
+  OUTPUT=$(ec2-run-instances $IMAGE -t $SIZE --region $REGION --key $KEYS -g $GROUP --user-data-file $INITFILE)
+  INSTANCE_ID=$(echo $OUTPUT|awk '{print $6}')
+
+  wait_for $INSTANCE_ID
 }
 
 
@@ -104,14 +154,14 @@ function deploy_vm () {
     task "Deploying branch $GIT_BRANCH with $AGENT_NUMBER Agents connected to $REDIS_NUMBER Redis"
 
     deploy_puppet_master
+    for i in `seq 1 $REDIS_NUMBER`;
+    do
+      deploy_redis $i
+    done
     for i in `seq 1 $AGENT_NUMBER`;
     do
       deploy_agent $i
     done   
-    for i in `seq 1 $REDIS_NUMBER`;
-    do
-      deploy_redis $i
-    done 
   fi
 }
 
