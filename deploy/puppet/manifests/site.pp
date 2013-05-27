@@ -1,8 +1,8 @@
     node /^agent/ {
-	include agent
+	include agentpopbox
     }
 
     node /^redis/ {
-	include redis
+	include redispopbox
     }
 

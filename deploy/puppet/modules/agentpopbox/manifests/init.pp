@@ -1,4 +1,4 @@
-class agent {
+class agentpopbox {
   # Configuration
   ################################
   $installdir = "/home/ubuntu"
