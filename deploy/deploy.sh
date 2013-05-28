@@ -87,6 +87,7 @@ function deploy_agent() {
   INITFILE=$TMP_FOLDER/initAgent.sh
   OUTPUT=$(ec2-run-instances $IMAGE -t $SIZE --region $REGION --key $KEYS -g $GROUP --user-data-file $INITFILE)
   INSTANCE_ID=$(echo $OUTPUT|awk '{print $6}')
+  AGENT_IDS+=( $INSTANCE_ID )
 
   wait_for $INSTANCE_ID
 }
@@ -94,6 +95,7 @@ function deploy_agent() {
 # Extract the IPs of the redis using its instance ID and add it to the global array
 function extract_redis_data() {
   INSTANCE_ID=$1
+  REDIS_IDS+=( $1 )
   OUTPUT=$(ec2-describe-instances --region $REGION $INSTANCE_ID)
   REDIS_IN_IP=$(echo $OUTPUT | awk '{print $19}')
   REDIS_OUT_IP=$(echo $OUTPUT | awk '{print $18}')
@@ -128,8 +130,8 @@ function deploy_minimal() {
 function extract_puppet_master_data() {
   INSTANCE_ID=$1
   OUTPUT=$(ec2-describe-instances --region $REGION $INSTANCE_ID)
-  PM_OUT_IP=$(echo $OUTPUT | awk '{print $19}')
-  PM_IN_IP=$(echo $OUTPUT | awk '{print $18}')
+  PM_OUT_IP=$(echo $OUTPUT | awk '{print $18}')
+  PM_IN_IP=$(echo $OUTPUT | awk '{print $19}')
   log "Puppet Master: InternalIP($PM_IN_IP), ExternalIP($PM_OUT_IP)"
 }
 
@@ -148,6 +150,9 @@ function deploy_puppet_master() {
   wait_for $INSTANCE_ID
   extract_puppet_master_data $INSTANCE_ID
   create_init_scripts
+  
+  log "Waiting 30s for the Puppet Master to be ready"
+  sleep 30
 }
 
 
@@ -182,6 +187,22 @@ function deploy_vm () {
     do
       deploy_agent $i
     done   
+
+    REDIS_OUT_ARRAY=$(printf ", %s" "${REDIS_OUT_IPS[@]}")
+    REDIS_OUT_ARRAY=${REDIS_OUT_ARRAY:1}
+    REDIS_IN_ARRAY=$(printf ", %s" "${REDIS_IN_IPS[@]}")
+    REDIS_IN_ARRAY=${REDIS_IN_ARRAY:1}
+    AGENT_IDS_ARRAY=$(printf ", %s" "${AGENT_IDS[@]}")
+    AGENT_IDS_ARRAY=${AGENT_IDS_ARRAY:1}
+    REDIS_IDS_ARRAY=$(printf ", %s" "${REDIS_IDS[@]}")
+    REDIS_IDS_ARRAY=${REDIS_IDS_ARRAY:1}
+
+    task "Results"
+    log "Puppet Master ips: External ($PM_OUT_IP), Internal ($PM_IN_IP)"
+    log "Agent instances: $AGENT_IDS_ARRAY"
+    log "Redis instances: $REDIS_IDS_ARRAY"
+    log "Redis External Ips: $REDIS_IN_ARRAY"
+    log "Redis Internal Ips: $REDIS_OUT_ARRAY"
   fi
 }
 

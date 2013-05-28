@@ -9,3 +9,5 @@ wget https://github.com/dmoranj/PopBox/archive/deployment.zip
 unzip deployment.zip
 cp -Rf PopBox-deployment/deploy/puppet /etc
 
+echo "*" > /etc/puppet/autosign.conf
+

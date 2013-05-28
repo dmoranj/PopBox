@@ -72,6 +72,13 @@ class agentpopbox {
     require => Exec['popboxclone'],
   }
 
+  file { "${popboxdir}/lib/baseConfig.js":
+    owner => "root",
+    group => "root",
+    mode => 644,
+    source => "puppet:///modules/${module_name}/baseConfig.js",
+  }
+  
   notify {'Popbox cloned and installed':
     require => Exec['dependencies'],
   }

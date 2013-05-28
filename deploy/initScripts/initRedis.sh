@@ -9,4 +9,6 @@ hostname $(cat /etc/hostname)
 
 echo "@PM_IP puppet" >> /etc/hosts
 
+sed -i s/START=no/START=yes/g /etc/default/puppet
+service puppet start
 
