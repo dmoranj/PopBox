@@ -65,11 +65,11 @@ function wait_for() {
   log "Waiting for instance $IID" 
 
   TIMES=0
-  while [ 5 -gt $TIMES ] && ! ec2-describe-instances --region $REGION $IID | grep -q "running"
+  while [ 10 -gt $TIMES ] && ! ec2-describe-instances --region $REGION $IID | grep -q "running"
   do
     TIMES=$(( $TIMES + 1 ))
     log "Verifying state of instance $IID"
-    sleep 10
+    sleep 25
   done 
 
   STATUS=$(ec2-describe-instance-status --region $REGION $IID | awk '/^INSTANCE/ {print $4}' | head -n 1)
@@ -151,10 +151,10 @@ function deploy_puppet_master() {
   extract_puppet_master_data $INSTANCE_ID
   create_init_scripts
   
-  log "Waiting 30s for the Puppet Master to be ready"
-  sleep 30
+  SLEEP_TIME=60
+  log "Waiting $SLEEP_TIME s for the Puppet Master to be ready"
+  sleep $SLEEP_TIME
 }
-
 
 # Deploy an instance of the full stack. The number of Popbox Agents and 
 # Redis instances will be taken from the config files, unless overriden
@@ -183,6 +183,7 @@ function deploy_vm () {
     do
       deploy_redis $i
     done
+#    update_redis_array
     for i in `seq 1 $AGENT_NUMBER`;
     do
       deploy_agent $i
