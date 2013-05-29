@@ -86,7 +86,7 @@ function wait_for() {
 function deploy_agent() {
   task "Deploying Popbox Agent number $1"
   INITFILE=$TMP_FOLDER/initAgent.sh
-  OUTPUT=$(ec2-run-instances $IMAGE -t $SIZE --region $REGION --key $KEYS -g $GROUP --user-data-file $INITFILE)
+  OUTPUT=$(ec2-run-instances $IMAGE -t $SIZE_AGENT --region $REGION --key $KEYS -g $GROUP --user-data-file $INITFILE)
   INSTANCE_ID=$(echo $OUTPUT|awk '{print $6}')
   AGENT_IDS+=( $INSTANCE_ID )
 
@@ -109,7 +109,7 @@ function extract_redis_data() {
 function deploy_redis() {
   task "Deploying Redis instance number $1"
   INITFILE=$TMP_FOLDER/initRedis.sh
-  OUTPUT=$(ec2-run-instances $IMAGE -t $SIZE --region $REGION --key $KEYS -g $GROUP --user-data-file $INITFILE)
+  OUTPUT=$(ec2-run-instances $IMAGE -t $SIZE_REDIS --region $REGION --key $KEYS -g $GROUP --user-data-file $INITFILE)
   INSTANCE_ID=$(echo $OUTPUT|awk '{print $6}')
 
   wait_for $INSTANCE_ID
@@ -121,7 +121,7 @@ function deploy_redis() {
 function deploy_minimal() {
   task "Deploying minimal instance"
   INITFILE=./initScripts/initMinimal.sh
-  OUTPUT=$(ec2-run-instances $IMAGE -t $SIZE --region $REGION --key $KEYS -g $GROUP --user-data-file $INITFILE)
+  OUTPUT=$(ec2-run-instances $IMAGE -t $SIZE_AGENT --region $REGION --key $KEYS -g $GROUP --user-data-file $INITFILE)
   INSTANCE_ID=$(echo $OUTPUT|awk '{print $6}')
 
   wait_for $INSTANCE_ID
@@ -145,7 +145,7 @@ function create_init_scripts() {
 function deploy_puppet_master() {
   task "Deploying puppet master"
   INITFILE=./initScripts/initPuppetMaster.sh
-  OUTPUT=$(ec2-run-instances $IMAGE -t $SIZE --region $REGION --key $KEYS -g $GROUP --user-data-file $INITFILE)
+  OUTPUT=$(ec2-run-instances $IMAGE -t $SIZE_PUPPET --region $REGION --key $KEYS -g $GROUP --user-data-file $INITFILE)
   INSTANCE_ID=$(echo $OUTPUT|awk '{print $6}')
   PUPPET_MASTER_ID=$INSTANCE_ID
   wait_for $INSTANCE_ID
@@ -168,7 +168,7 @@ function print_summary() {
     REDIS_IDS_ARRAY=${REDIS_IDS_ARRAY:1}
 
     task "Printing Results"
-    echo "PUPPET_MASTER=$PUPPET_MASTER_ID" >> summary.popboxenv
+    echo "PUPPET_MASTER=$PUPPET_MASTER_ID" > summary.popboxenv
     echo "REDIS_INSTANCES=$REDIS_IDS_ARRAY" >> summary.popboxenv
     echo "AGENT_INSTANCES=$AGENT_IDS_ARRAY" >> summary.popboxenv
     echo -e "\n\n"

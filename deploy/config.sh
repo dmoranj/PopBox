@@ -1,7 +1,9 @@
 
 # Amazon EC2 configuration
 #############################################
-SIZE=t1.micro
+SIZE_AGENT=t1.micro
+SIZE_REDIS=m1.small
+SIZE_PUPPET=t1.micro
 REGION=eu-west-1
 KEYS=dani-keys
 GROUP=apigeetest
