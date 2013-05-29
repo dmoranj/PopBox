@@ -1,0 +1,39 @@
+#!/bin/bash
+
+function status_popbox() {
+  ps -ef |grep -v grep | egrep "node.*popbox" > /dev/null
+  RESULT=$?
+  exit $RESULT
+}
+
+function start_popbox() {
+  ps -ef |grep -v grep | egrep "node.*popbox" > /dev/null
+  RESULT=$?
+
+  if [[ $RESULT -eq 1 ]]; then
+    nohup /home/ubuntu/PopBox/bin/popbox &>> /var/log/popbox&
+  else
+    echo "Popbox agent already running"
+  fi
+}
+
+function stop_popbox() {
+  ps -ef |grep -v grep | egrep "node.*popbox" |awk '{print $2}' |xargs -I '{}' kill '{}'
+}
+
+case "$1" in
+    start)
+        start_popbox
+    ;;
+    stop)
+        stop_popbox
+    ;;
+    restart)
+        start_popbox
+        stop_popbox
+    ;;
+    status)
+        status_popbox
+    ;;
+esac
+

@@ -79,7 +79,11 @@ class agentpopbox {
     source => "puppet:///modules/${module_name}/baseConfig.js",
   }
   
-  notify {'Popbox cloned and installed':
+  file { "/etc/init.d/popbox"
+    owner => "root",
+    group => "root",
+    mode => 744,
+    source => "puppet:///modules/${module_name}/popbox",
     require => Exec['dependencies'],
   }
 
