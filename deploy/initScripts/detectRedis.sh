@@ -10,4 +10,4 @@ done
 REDIS_OUT=${REDIS_OUT:2}
 
 sed -i "s/exports.redisServers = .*;/exports.redisServers = [$REDIS_OUT];/" /etc/puppet/modules/agentpopbox/files/baseConfig.js
-
+sed -i "s/exports.tranRedisServer = .*;/exports.tranRedisServer = {host: '$REDIS_OUT[0]', port: 6379};/" /etc/puppet/modules/agentpopbox/files/baseConfig.js

@@ -12,6 +12,6 @@ cp -Rf PopBox-deployment/deploy/puppet /etc
 chmod +x PopBox-deployment/deploy/initScripts/detectRedis.sh
 
 echo "*" > /etc/puppet/autosign.conf
-echo -e "* * * * * /root/PopBox-deployment/deploy/initScripts/detectRedis.sh\n" > /var/spool/cron/crontabs/root
+echo -e "* * * * * root /root/PopBox-deployment/deploy/initScripts/detectRedis.sh  > /root/redisUp.log\n" >> /etc/crontab
 service cron restart
 
