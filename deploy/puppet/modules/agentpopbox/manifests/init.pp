@@ -79,7 +79,7 @@ class agentpopbox {
     source => "puppet:///modules/${module_name}/baseConfig.js",
   }
   
-  file { "/etc/init.d/popbox"
+  file { "/etc/init.d/popbox":
     owner => "root",
     group => "root",
     mode => 744,
