@@ -73,6 +73,7 @@ class agentpopbox {
   }
 
   file { "${popboxdir}/lib/baseConfig.js":
+    notify => Service["popbox"],
     owner => "root",
     group => "root",
     mode => 644,
@@ -85,6 +86,12 @@ class agentpopbox {
     mode => 744,
     source => "puppet:///modules/${module_name}/popbox",
     require => Exec['dependencies'],
+  }
+
+  service { 'popbox':
+    ensure  => "running",
+    enable  => "true",
+    require => File["/etc/init.d/popbox"],
   }
 
   # Execute Popbox

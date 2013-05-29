@@ -5,7 +5,14 @@ class redispopbox {
     ensure => installed,
   }
   
+  service { 'redis-server':
+    ensure  => "running",
+    enable  => "true",
+    require => Package["redis-server"],
+  }
+
   file { "/etc/redis/redis.conf":
+    notify  => Service["redis-server"],
     owner => "root",
     group => "root",
     mode => 644,
