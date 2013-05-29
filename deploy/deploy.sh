@@ -30,6 +30,7 @@ function task() {
 function show_usage() {
   echo -e "Usage:"
   echo -e "\tdeploy.sh install [agents] [redisNodes] [branch]\n"
+  echo -e "\tdeploy.sh remove <summary_file>\n"
   echo -e "\tdeploy.sh help\n"
   exit 0
 }
@@ -146,7 +147,7 @@ function deploy_puppet_master() {
   INITFILE=./initScripts/initPuppetMaster.sh
   OUTPUT=$(ec2-run-instances $IMAGE -t $SIZE --region $REGION --key $KEYS -g $GROUP --user-data-file $INITFILE)
   INSTANCE_ID=$(echo $OUTPUT|awk '{print $6}')
-
+  PUPPET_MASTER_ID=$INSTANCE_ID
   wait_for $INSTANCE_ID
   extract_puppet_master_data $INSTANCE_ID
   create_init_scripts
@@ -154,6 +155,29 @@ function deploy_puppet_master() {
   SLEEP_TIME=60
   log "Waiting $SLEEP_TIME s for the Puppet Master to be ready"
   sleep $SLEEP_TIME
+}
+
+function print_summary() {
+    REDIS_OUT_ARRAY=$(printf ", %s" "${REDIS_OUT_IPS[@]}")
+    REDIS_OUT_ARRAY=${REDIS_OUT_ARRAY:1}
+    REDIS_IN_ARRAY=$(printf ", %s" "${REDIS_IN_IPS[@]}")
+    REDIS_IN_ARRAY=${REDIS_IN_ARRAY:1}
+    AGENT_IDS_ARRAY=$(printf ", %s" "${AGENT_IDS[@]}")
+    AGENT_IDS_ARRAY=${AGENT_IDS_ARRAY:1}
+    REDIS_IDS_ARRAY=$(printf ", %s" "${REDIS_IDS[@]}")
+    REDIS_IDS_ARRAY=${REDIS_IDS_ARRAY:1}
+
+    task "Printing Results"
+    echo "PUPPET_MASTER=$PUPPET_MASTER_ID" >> summary.popboxenv
+    echo "REDIS_INSTANCES=$REDIS_IDS_ARRAY" >> summary.popboxenv
+    echo "AGENT_INSTANCES=$AGENT_IDS_ARRAY" >> summary.popboxenv
+    echo -e "\n\n"
+    log "Puppet Master ips: External ($PM_OUT_IP), Internal ($PM_IN_IP)" >> summary.popboxenv
+    log "Agent instances: $AGENT_IDS_ARRAY" >> summary.popboxenv
+    log "Redis instances: $REDIS_IDS_ARRAY" >> summary.popboxenv
+    log "Redis External Ips: $REDIS_IN_ARRAY" >> summary.popboxenv
+    log "Redis Internal Ips: $REDIS_OUT_ARRAY" >> summary.popboxenv
+    cat summary.popboxenv
 }
 
 # Deploy an instance of the full stack. The number of Popbox Agents and 
@@ -183,28 +207,43 @@ function deploy_vm () {
     do
       deploy_redis $i
     done
-#    update_redis_array
+
     for i in `seq 1 $AGENT_NUMBER`;
     do
       deploy_agent $i
     done   
 
-    REDIS_OUT_ARRAY=$(printf ", %s" "${REDIS_OUT_IPS[@]}")
-    REDIS_OUT_ARRAY=${REDIS_OUT_ARRAY:1}
-    REDIS_IN_ARRAY=$(printf ", %s" "${REDIS_IN_IPS[@]}")
-    REDIS_IN_ARRAY=${REDIS_IN_ARRAY:1}
-    AGENT_IDS_ARRAY=$(printf ", %s" "${AGENT_IDS[@]}")
-    AGENT_IDS_ARRAY=${AGENT_IDS_ARRAY:1}
-    REDIS_IDS_ARRAY=$(printf ", %s" "${REDIS_IDS[@]}")
-    REDIS_IDS_ARRAY=${REDIS_IDS_ARRAY:1}
-
-    task "Results"
-    log "Puppet Master ips: External ($PM_OUT_IP), Internal ($PM_IN_IP)"
-    log "Agent instances: $AGENT_IDS_ARRAY"
-    log "Redis instances: $REDIS_IDS_ARRAY"
-    log "Redis External Ips: $REDIS_IN_ARRAY"
-    log "Redis Internal Ips: $REDIS_OUT_ARRAY"
+    print_summary
   fi
+}
+
+function remove_vms() {
+  SUMMARY=$1
+
+  if [[ -z "$SUMMARY" ]]; then
+    error "No summary provided. Nothing will be removed"
+    exit 1
+  fi
+
+  task "Removing selected environment: $SUMMARY"
+
+  PUPPET_MASTER_ID=$(cat $1 |grep PUPPET_MASTER| cut -d= -f2)
+  REDIS_IDS=$(cat $1 |grep REDIS_INSTANCES|cut -d= -f2|tr -d ,)
+  AGENT_IDS=$(cat $1 |grep AGENT_INSTANCES|cut -d= -f2|tr -d ,)
+
+  log "Removing Puppet Master with id $PUPPET_MASTER_ID"
+  ec2-terminate-instances --region $REGION $PUPPET_MASTER_ID
+
+  for id in $REDIS_IDS; do
+    log "Removing Redis instance $id"
+    ec2-terminate-instances --region $REGION $id
+  done
+
+  for id in $AGENT_IDS; do
+    log "Removing Popbox agent instance $id"
+    ec2-terminate-instances --region $REGION $id
+  done
+
 }
 
 # Check the first command line argument to execute the corresponding action.
@@ -212,6 +251,9 @@ function dispatch_actions() {
   case "$1" in 
     install)
 	deploy_vm $2 $3 $4
+    ;;
+    remove)
+        remove_vms $2
     ;;
     help)
         show_usage
