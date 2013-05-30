@@ -5,7 +5,9 @@
 # DEFINITIONS
 ####################################################################
 TMP_FOLDER=/tmp
-
+declare -A LAYER_IDS
+declare -A LAYER_OUT_IPS
+declare -A LAYER_IN_IPS
 
 # FUNCTIONS
 ####################################################################
@@ -82,38 +84,27 @@ function wait_for() {
   fi  
 }
 
-# Deploy a PopBox agent instance in EC2 that will be connected to an external redis.
-function deploy_agent() {
-  task "Deploying Popbox Agent number $1"
-  INITFILE=$TMP_FOLDER/initAgent.sh
-  OUTPUT=$(ec2-run-instances $IMAGE -t $SIZE_AGENT --region $REGION --key $KEYS -g $GROUP --user-data-file $INITFILE)
-  INSTANCE_ID=$(echo $OUTPUT|awk '{print $6}')
-  AGENT_IDS+=( $INSTANCE_ID )
-
-  wait_for $INSTANCE_ID
-}
-
 # Extract the IPs of the redis using its instance ID and add it to the global array
-function extract_redis_data() {
+function extract_node_data() {
   INSTANCE_ID=$1
-  REDIS_IDS+=( $1 )
   OUTPUT=$(ec2-describe-instances --region $REGION $INSTANCE_ID)
-  REDIS_IN_IP=$(echo $OUTPUT | awk '{print $19}')
-  REDIS_OUT_IP=$(echo $OUTPUT | awk '{print $18}')
-  REDIS_OUT_IPS+=( $REDIS_OUT_IP )
-  REDIS_IN_IPS+=( $REDIS_IN_IP )
-  log "REDIS: InternalIP($REDIS_IN_IP), ExternalIP($REDIS_OUT_IP)"
+  NODE_IN_IP=$(echo $OUTPUT | awk '{print $19}')
+  NODE_OUT_IP=$(echo $OUTPUT | awk '{print $18}')
+  LAYER_IN_IPS[$2]+=" $NODE_IN_IP"
+  LAYER_OUT_IPS[$2]+=" $NODE_OUT_IP"
+  log "$2: InternalIP($NODE_IN_IP), ExternalIP($NODE_OUT_IP)"
 }
 
 # Deploy a Redis instance in EC2
-function deploy_redis() {
-  task "Deploying Redis instance number $1"
-  INITFILE=$TMP_FOLDER/initRedis.sh
+function deploy_node() {
+  task "Deploying <<$2>> instance number $1"
+  INITFILE=$TMP_FOLDER/init-$2.sh
   OUTPUT=$(ec2-run-instances $IMAGE -t $SIZE_REDIS --region $REGION --key $KEYS -g $GROUP --user-data-file $INITFILE)
   INSTANCE_ID=$(echo $OUTPUT|awk '{print $6}')
+  LAYER_IDS[$2]+=" $INSTANCE_ID"
 
   wait_for $INSTANCE_ID
-  extract_redis_data $INSTANCE_ID
+  extract_node_data $INSTANCE_ID $2
 }
 
 # Deploy a minimal installation of PopBox composed of a single EC2 instance with 
@@ -137,8 +128,8 @@ function extract_puppet_master_data() {
 }
 
 function create_init_scripts() {
-  cat initScripts/initAgent.sh | sed s/@PM_IP/$PM_IN_IP/g > $TMP_FOLDER/initAgent.sh
-  cat initScripts/initRedis.sh | sed s/@PM_IP/$PM_IN_IP/g > $TMP_FOLDER/initRedis.sh
+  cat initScripts/init-agent.sh | sed s/@PM_IP/$PM_IN_IP/g > $TMP_FOLDER/init-agent.sh
+  cat initScripts/init-redis.sh | sed s/@PM_IP/$PM_IN_IP/g > $TMP_FOLDER/init-redis.sh
 }
 
 # Deploy the puppet master that will coordinate the configuration of the machines
@@ -158,25 +149,21 @@ function deploy_puppet_master() {
 }
 
 function print_summary() {
-    REDIS_OUT_ARRAY=$(printf ", %s" "${REDIS_OUT_IPS[@]}")
-    REDIS_OUT_ARRAY=${REDIS_OUT_ARRAY:1}
-    REDIS_IN_ARRAY=$(printf ", %s" "${REDIS_IN_IPS[@]}")
-    REDIS_IN_ARRAY=${REDIS_IN_ARRAY:1}
-    AGENT_IDS_ARRAY=$(printf ", %s" "${AGENT_IDS[@]}")
-    AGENT_IDS_ARRAY=${AGENT_IDS_ARRAY:1}
-    REDIS_IDS_ARRAY=$(printf ", %s" "${REDIS_IDS[@]}")
-    REDIS_IDS_ARRAY=${REDIS_IDS_ARRAY:1}
+    REDIS_IDS=${LAYER_IDS[redis]}
+    AGENT_IDS=${LAYER_IDS[agent]}
 
     task "Printing Results"
     echo "PUPPET_MASTER=$PUPPET_MASTER_ID" > summary.popboxenv
-    echo "REDIS_INSTANCES=$REDIS_IDS_ARRAY" >> summary.popboxenv
-    echo "AGENT_INSTANCES=$AGENT_IDS_ARRAY" >> summary.popboxenv
+    echo "REDIS_INSTANCES=$REDIS_IDS" >> summary.popboxenv
+    echo "AGENT_INSTANCES=$AGENT_IDS" >> summary.popboxenv
     echo -e "\n\n"
     log "Puppet Master ips: External ($PM_OUT_IP), Internal ($PM_IN_IP)" >> summary.popboxenv
-    log "Agent instances: $AGENT_IDS_ARRAY" >> summary.popboxenv
-    log "Redis instances: $REDIS_IDS_ARRAY" >> summary.popboxenv
-    log "Redis External Ips: $REDIS_IN_ARRAY" >> summary.popboxenv
-    log "Redis Internal Ips: $REDIS_OUT_ARRAY" >> summary.popboxenv
+    log "Agent instances: $AGENT_IDS" >> summary.popboxenv
+    log "Agent external ips: ${LAYER_OUT_IPS[agent]}" >> summary.popboxenv
+    log "Agent internal ips: ${LAYER_IN_IPS[agent]}" >> summary.popboxenv
+    log "Redis instances: $REDIS_IDS" >> summary.popboxenv
+    log "Agent external ips: ${LAYER_OUT_IPS[redis]}" >> summary.popboxenv
+    log "Agent internal ips: ${LAYER_IN_IPS[redis]}" >> summary.popboxenv
     cat summary.popboxenv
 }
 
@@ -205,12 +192,12 @@ function deploy_vm () {
     deploy_puppet_master
     for i in `seq 1 $REDIS_NUMBER`;
     do
-      deploy_redis $i
+      deploy_node $i "redis"
     done
 
     for i in `seq 1 $AGENT_NUMBER`;
     do
-      deploy_agent $i
+      deploy_node $i "agent"
     done   
 
     print_summary
@@ -228,8 +215,8 @@ function remove_vms() {
   task "Removing selected environment: $SUMMARY"
 
   PUPPET_MASTER_ID=$(cat $1 |grep PUPPET_MASTER| cut -d= -f2)
-  REDIS_IDS=$(cat $1 |grep REDIS_INSTANCES|cut -d= -f2|tr -d ,)
-  AGENT_IDS=$(cat $1 |grep AGENT_INSTANCES|cut -d= -f2|tr -d ,)
+  REDIS_IDS=$(cat $1 |grep REDIS_INSTANCES|cut -d= -f2)
+  AGENT_IDS=$(cat $1 |grep AGENT_INSTANCES|cut -d= -f2)
 
   log "Removing Puppet Master with id $PUPPET_MASTER_ID"
   ec2-terminate-instances --region $REGION $PUPPET_MASTER_ID

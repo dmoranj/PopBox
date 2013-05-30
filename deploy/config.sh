@@ -2,7 +2,7 @@
 # Amazon EC2 configuration
 #############################################
 SIZE_AGENT=t1.micro
-SIZE_REDIS=m1.small
+SIZE_REDIS=t1.micro
 SIZE_PUPPET=t1.micro
 REGION=eu-west-1
 KEYS=dani-keys
