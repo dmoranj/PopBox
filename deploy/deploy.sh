@@ -8,6 +8,11 @@ TMP_FOLDER=/tmp
 declare -A LAYER_IDS
 declare -A LAYER_OUT_IPS
 declare -A LAYER_IN_IPS
+declare -A LAYER_NUMBER
+
+LAYERS="redis agent"
+
+
 
 # FUNCTIONS
 ####################################################################
@@ -128,8 +133,9 @@ function extract_puppet_master_data() {
 }
 
 function create_init_scripts() {
-  cat initScripts/init-agent.sh | sed s/@PM_IP/$PM_IN_IP/g > $TMP_FOLDER/init-agent.sh
-  cat initScripts/init-redis.sh | sed s/@PM_IP/$PM_IN_IP/g > $TMP_FOLDER/init-redis.sh
+  for nodename in $LAYERS; do
+    cat initScripts/init-node.sh | sed s/@PM_IP/$PM_IN_IP/g | sed s/@NODE_TAG/$nodename/g > $TMP_FOLDER/init-$nodename.sh
+  done
 }
 
 # Deploy the puppet master that will coordinate the configuration of the machines
@@ -149,22 +155,24 @@ function deploy_puppet_master() {
 }
 
 function print_summary() {
-    REDIS_IDS=${LAYER_IDS[redis]}
-    AGENT_IDS=${LAYER_IDS[agent]}
-
     task "Printing Results"
-    echo "PUPPET_MASTER=$PUPPET_MASTER_ID" > summary.popboxenv
-    echo "REDIS_INSTANCES=$REDIS_IDS" >> summary.popboxenv
-    echo "AGENT_INSTANCES=$AGENT_IDS" >> summary.popboxenv
-    echo -e "\n\n"
-    log "Puppet Master ips: External ($PM_OUT_IP), Internal ($PM_IN_IP)" >> summary.popboxenv
-    log "Agent instances: $AGENT_IDS" >> summary.popboxenv
-    log "Agent external ips: ${LAYER_OUT_IPS[agent]}" >> summary.popboxenv
-    log "Agent internal ips: ${LAYER_IN_IPS[agent]}" >> summary.popboxenv
-    log "Redis instances: $REDIS_IDS" >> summary.popboxenv
-    log "Agent external ips: ${LAYER_OUT_IPS[redis]}" >> summary.popboxenv
-    log "Agent internal ips: ${LAYER_IN_IPS[redis]}" >> summary.popboxenv
-    cat summary.popboxenv
+    
+    TOTAL_INSTANCES=$PUPPET_MASTER_ID
+    for nodename in $LAYERS; do
+      TOTAL_INSTANCES+=" ${LAYER_IDS[$nodename]}"
+    done
+
+    echo "TOTAL_INSTANCES=$TOTAL_INSTANCES" >  summary.tdafenv
+    echo -e "\n\n" >>  summary.tdafenv
+    log "Puppet Master ips: External ($PM_OUT_IP), Internal ($PM_IN_IP)" >> summary.tdafenv
+
+    for nodename in $LAYERS; do
+      log "Node $nodename instances: ${LAYER_IDS[$nodename]}" >> summary.tdafenv
+      log "Node $nodename external ips: ${LAYER_OUT_IPS[$nodename]}" >> summary.tdafenv
+      log "Node $nodename internal ips: ${LAYER_IN_IPS[$nodename]}" >> summary.tdafenv
+    done
+
+    cat summary.tdafenv
 }
 
 # Deploy an instance of the full stack. The number of Popbox Agents and 
@@ -172,7 +180,7 @@ function print_summary() {
 # by the input parameters.
 function deploy_vm () {
   if [[ -n "$1" ]]; then
-    AGENT_NUMBER=$1
+    LAYER_NUMBER[agent]=$1
   fi;
 
   if [[ -n "$3" ]]; then
@@ -180,25 +188,23 @@ function deploy_vm () {
   fi;
 
   if [[ -n "$2" ]]; then
-    REDIS_NUMBER=$2
+    LAYER_NUMBER[redis]=$2
   fi;
 
-  if [[ $AGENT_NUMBER = 0 ]]; then
+  if [[ ${LAYER_NUMBER[agent]} = 0 ]]; then
     task "Deploying branch $GIT_BRANCH in the minimal configuration"
     deploy_minimal
   else
-    task "Deploying branch $GIT_BRANCH with $AGENT_NUMBER Agents connected to $REDIS_NUMBER Redis"
+    task "Deploying branch $GIT_BRANCH with ${LAYER_NUMBER[agent]} Agents connected to ${LAYER_NUMBER[redis]} Redis"
 
     deploy_puppet_master
-    for i in `seq 1 $REDIS_NUMBER`;
-    do
-      deploy_node $i "redis"
-    done
 
-    for i in `seq 1 $AGENT_NUMBER`;
-    do
-      deploy_node $i "agent"
-    done   
+    for nodename in $LAYERS; do
+      for i in `seq 1 ${LAYER_NUMBER[$nodename]}`;
+      do
+        deploy_node $i $nodename
+      done
+    done
 
     print_summary
   fi
@@ -214,20 +220,10 @@ function remove_vms() {
 
   task "Removing selected environment: $SUMMARY"
 
-  PUPPET_MASTER_ID=$(cat $1 |grep PUPPET_MASTER| cut -d= -f2)
-  REDIS_IDS=$(cat $1 |grep REDIS_INSTANCES|cut -d= -f2)
-  AGENT_IDS=$(cat $1 |grep AGENT_INSTANCES|cut -d= -f2)
+  TOTAL_IDS=$(cat $1 |grep TOTAL_INSTANCES| cut -d= -f2)
 
-  log "Removing Puppet Master with id $PUPPET_MASTER_ID"
-  ec2-terminate-instances --region $REGION $PUPPET_MASTER_ID
-
-  for id in $REDIS_IDS; do
-    log "Removing Redis instance $id"
-    ec2-terminate-instances --region $REGION $id
-  done
-
-  for id in $AGENT_IDS; do
-    log "Removing Popbox agent instance $id"
+  for id in $TOTAL_IDS; do
+    log "Removing instance $id"
     ec2-terminate-instances --region $REGION $id
   done
 
