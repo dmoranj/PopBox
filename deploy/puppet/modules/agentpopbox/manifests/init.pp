@@ -12,6 +12,7 @@ class agentpopbox {
 
   package { 'nodejs':
     ensure => installed,
+    require => Package['git'],
   }
 
   package { 'nodejs-legacy':
@@ -21,7 +22,7 @@ class agentpopbox {
 
   package { 'npm':
     ensure => installed,
-    require => Package['nodejs'],
+    require => Package['nodejs-legacy'],
   }
 
   notify {'Packages installed':
@@ -61,7 +62,7 @@ class agentpopbox {
   # Install Popbox
   #################################################
   exec {'popboxclone':
-    command => 'git clone https://github.com/dmoranj/PopBox.git',
+    command => 'git clone -b util_scripts https://github.com/telefonicaid/PopBox.git',
     cwd => $installdir,
     unless => "ls ${popboxdir}",
     require => Exec['n 0.8.14'],
@@ -96,11 +97,4 @@ class agentpopbox {
     require => File["/etc/init.d/popbox"],
   }
 
-  # Execute Popbox
-  ######################################################
-  #exec {'popbox':
-  #command => 'nohup bin/popbox &> pop.log&',
-  #cwd => $popboxdir,
-  #require => Exec['dependencies'],
-  #}
 }
