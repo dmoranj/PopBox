@@ -64,6 +64,7 @@ class agentpopbox {
     command => 'git clone https://github.com/dmoranj/PopBox.git',
     cwd => $installdir,
     unless => "ls ${popboxdir}",
+    require => Exec['n 0.8.14'],
   }
 
   exec {'dependencies':
@@ -78,6 +79,7 @@ class agentpopbox {
     group => "root",
     mode => 644,
     source => "puppet:///modules/${module_name}/baseConfig.js",
+    require => Exec['popboxclone'],
   }
   
   file { "/etc/init.d/popbox":
