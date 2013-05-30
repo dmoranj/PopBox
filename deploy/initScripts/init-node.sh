@@ -1,7 +1,7 @@
 #!/bin/bash
 
 apt-get update -y
-#apt-get dist-upgrade -y
+apt-get dist-upgrade -y
 apt-get install puppet -y
 
 echo "@NODE_TAG-$(hostname)" > /etc/hostname
@@ -12,7 +12,7 @@ echo "@PM_IP puppet" >> /etc/hosts
 cat << EOF >> /etc/puppet/puppet.conf
 
 [agent]
-splaylimit = 60
+splaylimit = 300
 runinterval = 300
 EOF
 

@@ -10,10 +10,6 @@ declare -A LAYER_OUT_IPS
 declare -A LAYER_IN_IPS
 declare -A LAYER_NUMBER
 
-LAYERS="redis agent"
-
-
-
 # FUNCTIONS
 ####################################################################
 
@@ -35,9 +31,13 @@ function task() {
 
 # Show the script usage
 function show_usage() {
-  echo -e "Usage:"
-  echo -e "\tdeploy.sh install [agents] [redisNodes] [branch]\n"
+  echo -e "\nUsage:"
+  echo -e "\tdeploy.sh install <branch-name> (<node-type> <node-number)+\n"
+  echo -e "\t\tDeploys an environment consisting of a Puppet master and a variable number of nodes, specified in the"
+  echo -e "\t\tcommand line as any number of pairs <node-type> <node-number>. The source code will be downloaded from"
+  echo -e "\t\tthe selected branch of the configured GIT repository\n"
   echo -e "\tdeploy.sh remove <summary_file>\n"
+  echo -e "\t\tRemoves an environment from a previously saved summary file\n"
   echo -e "\tdeploy.sh help\n"
   exit 0
 }
@@ -138,7 +138,7 @@ function deploy_puppet_master() {
   extract_puppet_master_data $INSTANCE_ID
   create_init_scripts
   
-  SLEEP_TIME=60
+  SLEEP_TIME=90
   log "Waiting $SLEEP_TIME s for the Puppet Master to be ready"
   sleep $SLEEP_TIME
 }
@@ -169,15 +169,7 @@ function print_summary() {
 # by the input parameters.
 function deploy_vm () {
   if [[ -n "$1" ]]; then
-    LAYER_NUMBER[agent]=$1
-  fi;
-
-  if [[ -n "$3" ]]; then
-    GIT_BRANCH=$3
-  fi;
-
-  if [[ -n "$2" ]]; then
-    LAYER_NUMBER[redis]=$2
+    GIT_BRANCH=$1
   fi;
 
   task "Deploying branch $GIT_BRANCH with ${LAYER_NUMBER[agent]} Agents connected to ${LAYER_NUMBER[redis]} Redis"
@@ -194,6 +186,7 @@ function deploy_vm () {
   print_summary
 }
 
+# Remove all the instances from a previously saved environment summary
 function remove_vms() {
   SUMMARY=$1
 
@@ -213,11 +206,35 @@ function remove_vms() {
 
 }
 
+# Extract the parameters from the command line to decide which modules to deploy
+function extract_parameters() {
+
+  if [[ $(($# % 2)) = 1 ]]; then
+    error "Wrong number of parameters, each node should have its node number"
+    exit 1
+  fi
+
+  if [[ $# < 4 ]]; then
+    error "Syntax error: at least one layer has to be specified"
+    exit 1
+  fi
+
+  ARRAY=(${@})
+  ELEMENTS=${#ARRAY[@]}
+
+  LAYERS=""
+  for (( i = 2; i < ${ELEMENTS}; i=i+2 )); do
+    LAYERS+="${ARRAY[$i]} "
+    LAYER_NUMBER[${ARRAY[$i]}]=${ARRAY[$(($i+1))]}
+  done
+}
+
 # Check the first command line argument to execute the corresponding action.
 function dispatch_actions() {
   case "$1" in 
     install)
-	deploy_vm $2 $3 $4
+        extract_parameters $@
+	deploy_vm $2
     ;;
     remove)
         remove_vms $2
@@ -232,7 +249,7 @@ function dispatch_actions() {
 }
 
 check_ec2_environment
-dispatch_actions $1 $2 $3 $4
+dispatch_actions $@
 
 task "All actions finished\n"
 
