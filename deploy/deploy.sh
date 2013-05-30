@@ -112,17 +112,6 @@ function deploy_node() {
   extract_node_data $INSTANCE_ID $2
 }
 
-# Deploy a minimal installation of PopBox composed of a single EC2 instance with 
-# Redis and the PopBox agent
-function deploy_minimal() {
-  task "Deploying minimal instance"
-  INITFILE=./initScripts/initMinimal.sh
-  OUTPUT=$(ec2-run-instances $IMAGE -t $SIZE_AGENT --region $REGION --key $KEYS -g $GROUP --user-data-file $INITFILE)
-  INSTANCE_ID=$(echo $OUTPUT|awk '{print $6}')
-
-  wait_for $INSTANCE_ID
-}
-
 # Extract the Puppet Master data from its instance ID in EC2
 function extract_puppet_master_data() {
   INSTANCE_ID=$1
@@ -191,23 +180,18 @@ function deploy_vm () {
     LAYER_NUMBER[redis]=$2
   fi;
 
-  if [[ ${LAYER_NUMBER[agent]} = 0 ]]; then
-    task "Deploying branch $GIT_BRANCH in the minimal configuration"
-    deploy_minimal
-  else
-    task "Deploying branch $GIT_BRANCH with ${LAYER_NUMBER[agent]} Agents connected to ${LAYER_NUMBER[redis]} Redis"
+  task "Deploying branch $GIT_BRANCH with ${LAYER_NUMBER[agent]} Agents connected to ${LAYER_NUMBER[redis]} Redis"
 
-    deploy_puppet_master
+  deploy_puppet_master
 
-    for nodename in $LAYERS; do
-      for i in `seq 1 ${LAYER_NUMBER[$nodename]}`;
-      do
-        deploy_node $i $nodename
-      done
+  for nodename in $LAYERS; do
+    for i in `seq 1 ${LAYER_NUMBER[$nodename]}`;
+    do
+      deploy_node $i $nodename
     done
+  done
 
-    print_summary
-  fi
+  print_summary
 }
 
 function remove_vms() {
