@@ -6,3 +6,6 @@
 	include redispopbox
     }
 
+    node /^lb/ {
+        include lbpopbox
+    }
