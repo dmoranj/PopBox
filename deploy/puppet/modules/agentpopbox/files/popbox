@@ -3,6 +3,13 @@
 function status_popbox() {
   ps -ef |grep -v grep | egrep "node.*popbox" > /dev/null
   RESULT=$?
+
+  if [[ $RESULT = 0]]; then
+    echo "Popbox agent is running"
+  else
+    echo "Popbox agent is stopped"
+  fi
+
   exit $RESULT
 }
 
@@ -29,8 +36,8 @@ case "$1" in
         stop_popbox
     ;;
     restart)
-        start_popbox
         stop_popbox
+        start_popbox
     ;;
     status)
         status_popbox

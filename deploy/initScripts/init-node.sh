@@ -12,8 +12,8 @@ echo "@PM_IP puppet" >> /etc/hosts
 cat << EOF >> /etc/puppet/puppet.conf
 
 [agent]
-splaylimit = 100
-runinterval = 200
+splaylimit = 90
+runinterval = 300
 EOF
 
 sed -i s/START=no/START=yes/g /etc/default/puppet >> /var/log/syslog

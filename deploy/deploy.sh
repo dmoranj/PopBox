@@ -138,7 +138,7 @@ function deploy_puppet_master() {
   extract_puppet_master_data $INSTANCE_ID
   create_init_scripts
   
-  SLEEP_TIME=90
+  SLEEP_TIME=45
   log "Waiting $SLEEP_TIME s for the Puppet Master to be ready"
   sleep $SLEEP_TIME
 }
