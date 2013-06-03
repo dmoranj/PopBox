@@ -33,11 +33,16 @@ function task() {
 function show_usage() {
   echo -e "\nUsage:"
   echo -e "\tdeploy.sh install <branch-name> (<node-type> <node-number)+\n"
-  echo -e "\t\tDeploys an environment consisting of a Puppet master and a variable number of nodes, specified in the"
-  echo -e "\t\tcommand line as any number of pairs <node-type> <node-number>. The source code will be downloaded from"
+  echo -e "\t\tDeploys an environment consisting of a Puppet master and a variable"
+  echo -e "\t\tnumber of nodes, specified in the command line as any number of pairs"
+  echo -e "\t\t<node-type> <node-number>. The source code will be downloaded from"
   echo -e "\t\tthe selected branch of the configured GIT repository\n"
-  echo -e "\tdeploy.sh remove <summary_file>\n"
-  echo -e "\t\tRemoves an environment from a previously saved summary file\n"
+  echo -e "\tdeploy.sh uninstall <summary_file>\n"
+  echo -e "\t\tUninstall an environment from a previously saved summary file\n"
+  echo -e "\tdeploy.sh add <summary_file> <node_type>\n"
+  echo -e "\t\tAdds a new node of the given type to the given environment\n"
+  echo -e "\tdeploy.sh remove <summary_file> <node_type>\n"
+  echo -e "\t\tRemoves a node of the given type from the given environment\n"
   echo -e "\tdeploy.sh help\n"
   exit 0
 }
@@ -143,25 +148,43 @@ function deploy_puppet_master() {
   sleep $SLEEP_TIME
 }
 
+# Check all the EC2 data of each isntance and print it
+function print_instances() {
+
+    log "Instance summary"
+
+    for instance in $1; do
+      log "Instance id: $instance"
+
+      OUTPUT=$(ec2-describe-instances --region $REGION $instance | grep INSTANCE)
+        
+      log "External name: $(echo $OUTPUT  | awk '{print $4}')"
+      log "Internal name: $(echo $OUTPUT  | awk '{print $5}')"
+      log "External ip: $(echo $OUTPUT  | awk '{print $14}')"
+      log "Internal ip: $(echo $OUTPUT  | awk '{print $15}')"
+      echo -e "\n"
+    done
+}
+
 function print_summary() {
     task "Printing Results"
     
+    TARGET_FILE=summary.tdafenv
+
+    echo "* Environment summary:" > $TARGET_FILE
+
     TOTAL_INSTANCES=$PUPPET_MASTER_ID
     for nodename in $LAYERS; do
       TOTAL_INSTANCES+=" ${LAYER_IDS[$nodename]}"
+      echo "${nodename}_layer=${LAYER_IDS[$nodename]}" >> $TARGET_FILE
     done
 
-    echo "TOTAL_INSTANCES=$TOTAL_INSTANCES" >  summary.tdafenv
-    echo -e "\n\n" >>  summary.tdafenv
-    log "Puppet Master ips: External ($PM_OUT_IP), Internal ($PM_IN_IP)" >> summary.tdafenv
+    echo "TOTAL_INSTANCES=$TOTAL_INSTANCES" >> $TARGET_FILE
+    echo "PUPPET_MASTER=" $PM_IN_IP >> $TARGET_FILE
+    
+    log "Puppet Master ips: External ($PM_OUT_IP), Internal ($PM_IN_IP)"
 
-    for nodename in $LAYERS; do
-      log "Node $nodename instances: ${LAYER_IDS[$nodename]}" >> summary.tdafenv
-      log "Node $nodename external ips: ${LAYER_OUT_IPS[$nodename]}" >> summary.tdafenv
-      log "Node $nodename internal ips: ${LAYER_IN_IPS[$nodename]}" >> summary.tdafenv
-    done
-
-    cat summary.tdafenv
+    print_instances "$TOTAL_INSTANCES"
 }
 
 # Deploy an instance of the full stack. The number of Popbox Agents and 
@@ -186,15 +209,35 @@ function deploy_vm () {
   print_summary
 }
 
+# Check the file passed as a parameter is a valid environment file
+function check_environment() {
+  echo $1 |egrep ".*tdafenv" > /dev/null
+  
+  if [[ $? = 1 ]]; then
+    error "Extension not recognized. *.tdafenv expected."
+    exit 1
+  fi
+
+  cat $1 |egrep "TOTAL_INSTANCES" > /dev/null
+
+  if [[ $? = 1 ]]; then
+    error "Instance IDs not found. Invalid environment format."
+    exit 1
+  fi
+}
+
 # Remove all the instances from a previously saved environment summary
 function remove_vms() {
   SUMMARY=$1
+
+  check_environment $SUMMARY
 
   if [[ -z "$SUMMARY" ]]; then
     error "No summary provided. Nothing will be removed"
     exit 1
   fi
 
+  
   task "Removing selected environment: $SUMMARY"
 
   TOTAL_IDS=$(cat $1 |grep TOTAL_INSTANCES| cut -d= -f2)
@@ -204,6 +247,48 @@ function remove_vms() {
     ec2-terminate-instances --region $REGION $id
   done
 
+}
+
+# Add a new node to the environment passed as te first parameter. The second
+# parameter specifies the type of node to deploy.
+function add_node() {
+
+  if [[ -z "$1" ]]; then
+    error "No environment was provided. Nothing will be added"
+    exit 1
+  fi
+
+  if [[ -z "$2" ]]; then
+    error "Node type missing. Nothing will be added"
+    exit 1
+  fi
+
+  task "Adding node type $2 to environment $1"
+
+  # Find the Puppet Master ID to prepare the init_scripts
+  PM_IN_IP=$(cat summary.tdafenv |grep PUPPET_MASTER|awk '{print $2}')
+  LAYERS=$2
+  create_init_scripts
+
+  deploy_node 1 $2
+
+  sed -i "s/TOTAL_INSTANCES.*/& ${LAYER_IDS[$2]}/g" $1
+  sed -i "s/$2_layer.*/& ${LAYER_IDS[$2]}/g" $1  
+}
+
+function remove_node() {
+
+  if [[ -z "$1" ]]; then
+    error "No environment was provided. Nothing will be removed"
+    exit 1
+  fi
+
+  if [[ -z "$2" ]]; then
+    error "Node type missing. Nothing will be removed"
+    exit 1
+  fi
+
+  task "Removing node type $2 from environment $1"
 }
 
 # Extract the parameters from the command line to decide which modules to deploy
@@ -236,8 +321,14 @@ function dispatch_actions() {
         extract_parameters $@
 	deploy_vm $2
     ;;
-    remove)
+    uninstall)
         remove_vms $2
+    ;;
+    add)
+        add_node $2 $3
+    ;;
+    remove)
+        remove_node $2 $3
     ;;
     help)
         show_usage
