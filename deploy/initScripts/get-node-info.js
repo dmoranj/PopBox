@@ -3,7 +3,7 @@
 var async = require("async"),
     request = require("request"),
     fs = require("fs"),
-    targetFile = "resultados.json";
+    targetFile = "/etc/puppet/files/environment.json";
 
 function extractNodeList(data, callback) {
     var objectList = JSON.parse(data),
